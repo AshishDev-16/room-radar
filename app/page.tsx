@@ -1,27 +1,39 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Copy, Crown, Radio, RotateCcw, Sparkles, Users, Zap } from "lucide-react";
+import { Award, Check, Copy, Crown, HeartHandshake, Radio, RotateCcw, ShieldQuestion, Sparkles, Users, Zap } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 
 type Player = { id: string; name: string; score: number };
 type Pick = { playerId: string; option?: number; doubled: boolean; points: number; correct: boolean };
 type Game = {
   code: string; phase: "lobby" | "playing" | "reveal" | "finished"; round: number; totalRounds: number;
+  pack: "mixed" | "everyday" | "chaos" | "close";
   question: { prompt: string; options: string[] } | null; hotSeat: { id: string; name: string } | null;
   role: "hot-seat" | "predictor"; me: Player & { doubleAvailable: boolean; isHost: boolean };
   players: Player[]; submitted: boolean; submittedCount: number;
   reveal: { actualOption?: number; picks: Pick[] } | null;
+  strongestConnection: { reader?: string; target?: string; hits: number } | null;
+  awards: { mindReader?: string; boldestSignal?: string; mostMysterious?: string } | null;
+  hostInactive: boolean;
 };
 type Session = { code: string; token: string };
 type ApiResult = { game?: Game; error?: string };
 
 const SESSION_KEY = "room-radar-session";
 const optionLetters = ["A", "B", "C", "D"];
+const packOptions = [
+  { id: "mixed", name: "Mixed Signals", note: "A little bit of everything" },
+  { id: "everyday", name: "Everyday Radar", note: "Easy, fast, and friendly" },
+  { id: "chaos", name: "Chaos Mode", note: "Stranger choices, louder debates" },
+  { id: "close", name: "Close Friends", note: "Taste, habits, and personality" },
+] as const;
 
 function Logo() {
   return (
@@ -66,6 +78,7 @@ export default function Home() {
   const [selected, setSelected] = useState<number | null>(null);
   const [doubleDown, setDoubleDown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
 
   const fetchGame = useCallback(async (active: Session, quiet = false) => {
     try {
@@ -80,6 +93,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    setBaseUrl(`${window.location.origin}${window.location.pathname}`);
     const params = new URLSearchParams(window.location.search);
     const sharedCode = (params.get("room") || "").toUpperCase().slice(0, 5);
     const saved = localStorage.getItem(SESSION_KEY);
@@ -145,6 +159,7 @@ export default function Home() {
   }
 
   function leave() {
+    if (session) void fetch("/api/game", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "leave", code: session.code, token: session.token }) });
     localStorage.removeItem(SESSION_KEY);
     window.history.replaceState({}, "", window.location.pathname);
     setSession(null); setGame(null); setMode("home"); setError("");
@@ -243,6 +258,7 @@ export default function Home() {
           <div className="flex items-center gap-5 text-sm font-bold"><span className="text-slate-400">{game.players.length}/8 players</span>{game.phase !== "lobby" && <span className="text-lime-300">{game.me.score} pts</span>}</div>
         </div>
         {error && <p role="alert" className="mb-5 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-300">{error}</p>}
+        {!game.me.isHost && game.hostInactive && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/[.08] px-4 py-3"><span className="text-sm font-bold text-amber-100">The host appears to be offline. Keep the room moving?</span><Button disabled={busy} onClick={() => act("take-host")} className="h-10 rounded-xl bg-amber-300 font-black text-[#1a1204] hover:bg-amber-200">Become host</Button></div>}
 
         {game.phase === "lobby" && (
           <section className="grid gap-6 lg:grid-cols-[1fr_.78fr]">
@@ -250,10 +266,16 @@ export default function Home() {
               <p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-300">Waiting room</p>
               <h1 className="mt-2 text-4xl font-black tracking-[-.045em] sm:text-5xl">Bring the room online.</h1>
               <p className="mt-3 max-w-xl text-slate-400">Share the code or invite link. The host can launch as soon as two players are here.</p>
-              <button onClick={copyInvite} className="mt-7 flex w-full items-center justify-between rounded-2xl border border-dashed border-cyan-300/30 bg-cyan-300/[.06] p-5 text-left">
+              <button onClick={copyInvite} className="mt-7 flex w-full items-center justify-between gap-4 rounded-2xl border border-dashed border-cyan-300/30 bg-cyan-300/[.06] p-5 text-left">
                 <span><span className="block text-xs font-bold uppercase tracking-[.15em] text-slate-500">Invite code</span><span className="mt-1 block font-mono text-3xl font-black tracking-[.25em] text-cyan-300">{game.code}</span></span>
-                <span className="grid size-11 place-items-center rounded-full bg-cyan-300 text-[#071018]">{copied ? <Check className="size-5" /> : <Copy className="size-5" />}</span>
+                <span className="grid size-[82px] place-items-center rounded-xl bg-white p-2">{baseUrl && <QRCodeSVG value={`${baseUrl}?room=${game.code}`} size={66} bgColor="#ffffff" fgColor="#071018" level="M" />}</span>
               </button>
+              <div className="mt-5">
+                <div className="mb-3 flex items-center justify-between"><p className="text-xs font-black uppercase tracking-[.15em] text-slate-500">Question pack</p>{!game.me.isHost && <span className="text-xs text-slate-600">Host chooses</span>}</div>
+                <RadioGroup value={game.pack} onValueChange={(pack) => void act("set-pack", { pack })} disabled={!game.me.isHost || busy} className="grid gap-2 sm:grid-cols-2">
+                  {packOptions.map((pack) => <label key={pack.id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition ${game.pack === pack.id ? "border-cyan-300/40 bg-cyan-300/[.08]" : "border-white/8 bg-white/[.025]"}`}><RadioGroupItem value={pack.id} className="mt-1 border-white/20 text-cyan-300" /><span><b className="block text-sm">{pack.name}</b><span className="text-xs leading-5 text-slate-500">{pack.note}</span></span></label>)}
+                </RadioGroup>
+              </div>
               {game.me.isHost ? <Button disabled={busy || game.players.length < 2} onClick={() => act("start")} className="mt-5 h-14 w-full rounded-2xl bg-lime-300 text-base font-black text-[#111908] hover:bg-lime-200">{game.players.length < 2 ? "Waiting for one more player…" : "Start the game"}</Button> : <div className="mt-5 rounded-2xl bg-white/5 px-4 py-4 text-center text-sm font-bold text-slate-400">Waiting for the host to start…</div>}
             </div>
             <div className="rounded-[2rem] border border-white/12 bg-[#0c1924]/80 p-6">
@@ -291,7 +313,7 @@ export default function Home() {
                 )}
                 {game.phase === "playing" && game.submitted && <div className="mt-5 rounded-2xl border border-cyan-300/20 bg-cyan-300/[.07] px-5 py-4 text-center font-bold text-cyan-200">Answer locked. Scanning the room…</div>}
                 {game.phase === "reveal" && (
-                  <div className="mt-6 rounded-2xl border border-lime-300/20 bg-lime-300/[.07] p-5">
+                  <div className="reveal-panel mt-6 rounded-2xl border border-lime-300/20 bg-lime-300/[.07] p-5">
                     <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.15em] text-lime-300">Signal revealed</p><p className="mt-1 font-bold"><span className="text-white">{game.hotSeat?.name}</span> picked {optionLetters[hotSeatPick?.option ?? 0]}</p></div>{game.reveal?.picks.find((pick) => pick.playerId === game.me.id)?.points ? <b className="text-2xl text-lime-300">+{game.reveal.picks.find((pick) => pick.playerId === game.me.id)?.points} pts</b> : game.role === "predictor" ? <b className="text-slate-400">No points</b> : null}</div>
                     {game.me.isHost ? <Button disabled={busy} onClick={() => act("next")} className="mt-4 h-12 w-full rounded-xl bg-lime-300 font-black text-[#111908] hover:bg-lime-200">{game.round + 1 === game.totalRounds ? "See final results" : "Next round"}</Button> : <p className="mt-4 text-center text-sm font-semibold text-slate-500">Waiting for the host…</p>}
                   </div>
@@ -312,6 +334,12 @@ export default function Home() {
             <h1 className="mt-2 text-5xl font-black tracking-[-.05em]">{standings[0]?.name}</h1>
             <p className="mt-2 text-slate-400">The room has been read. Mostly.</p>
             <div className="mx-auto mt-7 grid max-w-lg gap-2">{standings.map((player, index) => <div key={player.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left ${index === 0 ? "border-lime-300/25 bg-lime-300/[.07]" : "border-white/8 bg-white/[.03]"}`}><span className="flex items-center gap-3"><b className="w-5 text-slate-500">{index + 1}</b><b>{player.name}</b></span><strong className="text-cyan-300">{player.score} pts</strong></div>)}</div>
+            <div className="mt-7 grid gap-3 text-left sm:grid-cols-3">
+              <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[.055] p-4"><Award className="size-5 text-cyan-300" /><p className="mt-3 text-xs font-black uppercase tracking-[.13em] text-slate-500">Mind Reader</p><b className="mt-1 block">{game.awards?.mindReader}</b></div>
+              <div className="rounded-2xl border border-lime-300/15 bg-lime-300/[.055] p-4"><Sparkles className="size-5 text-lime-300" /><p className="mt-3 text-xs font-black uppercase tracking-[.13em] text-slate-500">Boldest Signal</p><b className="mt-1 block">{game.awards?.boldestSignal}</b></div>
+              <div className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.055] p-4"><ShieldQuestion className="size-5 text-fuchsia-300" /><p className="mt-3 text-xs font-black uppercase tracking-[.13em] text-slate-500">Most Mysterious</p><b className="mt-1 block">{game.awards?.mostMysterious}</b></div>
+            </div>
+            {game.strongestConnection && <div className="mt-3 flex items-center justify-center gap-3 rounded-2xl border border-white/8 bg-white/[.03] px-4 py-4 text-sm"><HeartHandshake className="size-5 text-cyan-300" /><span><b>{game.strongestConnection.reader}</b> read <b>{game.strongestConnection.target}</b> best · {game.strongestConnection.hits} correct</span></div>}
             {game.me.isHost ? <Button disabled={busy} onClick={() => act("replay")} className="mt-7 h-14 w-full rounded-2xl bg-cyan-300 text-base font-black text-[#071018] hover:bg-cyan-200"><RotateCcw className="mr-2 size-4" /> Play again</Button> : <div className="mt-7 rounded-2xl bg-white/5 px-4 py-4 text-sm font-bold text-slate-400">Waiting for the host to start another game…</div>}
             <button onClick={leave} className="mt-4 text-sm font-semibold text-slate-500 hover:text-white">Leave room</button>
           </section>

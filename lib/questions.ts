@@ -1,4 +1,5 @@
 export type Question = { prompt: string; options: [string, string, string, string] };
+export type QuestionPack = "mixed" | "everyday" | "chaos" | "close";
 
 export const QUESTIONS: Question[] = [
   { prompt: "A surprise free flight appears. Where do you go?", options: ["Tropical island", "Huge city", "The mountains", "Wherever food is best"] },
@@ -62,3 +63,10 @@ export const QUESTIONS: Question[] = [
   { prompt: "Pick a new annual holiday.", options: ["National Nap Day", "Second Birthday", "No-Email Day", "Free Dessert Day"] },
   { prompt: "What is your instinct in an escape room?", options: ["Search everywhere", "Solve the riddles", "Direct the team", "Try every code"] },
 ];
+
+export const QUESTION_PACKS: Record<QuestionPack, number[]> = {
+  mixed: QUESTIONS.map((_, index) => index),
+  everyday: QUESTIONS.map((_, index) => index).slice(0, 20),
+  chaos: QUESTIONS.map((_, index) => index).slice(20, 40),
+  close: QUESTIONS.map((_, index) => index).slice(40, 60),
+};

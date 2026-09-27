@@ -42,4 +42,10 @@ button, input { font: inherit; }
 @media (prefers-reduced-motion: no-preference) {
   .radar-orbit { animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { transform: scale(1.025); opacity: .72; } }
+  .reveal-panel { animation: reveal-signal .55s cubic-bezier(.2,.8,.2,1); }
+  @keyframes reveal-signal {
+    0% { opacity: 0; transform: translateY(10px) scale(.985); box-shadow: 0 0 0 rgba(190,242,100,0); }
+    55% { box-shadow: 0 0 50px rgba(190,242,100,.16); }
+    100% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 0 rgba(190,242,100,0); }
+  }
 }
